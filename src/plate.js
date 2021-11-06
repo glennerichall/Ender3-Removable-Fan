@@ -1,9 +1,11 @@
 const {extrudeLinear} = require('@jscad/modeling').extrusions;
 const {colorize} = require('@jscad/modeling').colors;
 const {cylinder, roundedRectangle} = require('@jscad/modeling').primitives;
-const {union, subtract} = require('@jscad/modeling').booleans;
+const {union, subtract} = require('../libs/booleans');
 const {hullChain} = require('@jscad/modeling').hulls;
 const {transform} = require('@jscad/modeling').transforms;
+
+const {box} = require('../libs/geometry');
 const {roundRect, applyTransforms} = require("../libs/primitives");
 const {drill} = require("../libs/holes");
 const {align, mirror} = require("../libs/transforms");
@@ -18,12 +20,11 @@ const {
 const pogo = require("../vitamins/pogo");
 
 
-
 function getConstants({
-                               e_plate_def = defaultE_Plate,
-                               magnet_def = defaultMagnet,
-                               tolerance = defaultTolerance
-                           } = {}) {
+                          e_plate_def = defaultE_Plate,
+                          magnet_def = defaultMagnet,
+                          tolerance = defaultTolerance
+                      } = {}) {
     const centerOffsetX = 5;
 
     const plate_def = {
@@ -116,23 +117,8 @@ function handle({
         .to(base).top.front.right
         .then.move.right(width - 2 * radius).apply();
 
-    let pogo_hole = pogo.create({
-            height: pogo_defs.height + tolerance,
-            width: pogo_defs.width + tolerance,
-            depth: getConstants().pogo.depth + tolerance,
-            forDrilling: true
-        }
-    );
-
-    let pogo_fitting =
-        extrudeLinear({
-                height: depth
-            },
-            roundedRectangle({
-                size: [pogo_defs.width + pogo_defs.thick, pogo_defs.height + pogo_defs.thick],
-                roundRadius: (pogo_defs.height + pogo_defs.thick) / 2 - epsilon
-            })
-        );
+    let pogo_hole = pogo.create_hole({depth});
+    let pogo_fitting = pogo.create_fitting({depth});
 
     const trMat = align(pogo_fitting).bottom.left.front
         .to(right_loft).top.right.front
@@ -168,13 +154,14 @@ function create(defs = {}) {
         ...defs
     };
 
-    const base_plate = extrudeLinear({height: defs.depth}, roundRect(defs.base));
+    const base_plate = box(extrudeLinear({height: defs.depth}, roundRect(defs.base)));
 
     const loft_and_pogo = handle({...defs.pogo.loft, depth: defs.depth}, base_plate);
 
-    const plate_with_holes = drill(defs.holes, union(base_plate, loft_and_pogo));
+    // const plate_with_holes = drill(defs.holes, union(base_plate, loft_and_pogo));
+    const plate_with_holes = drill(defs.holes, base_plate.union(loft_and_pogo));
 
-    defs.helpers.placePogo = pogo =>{
+    defs.helpers.placePogo = pogo => {
         return mirror(pogo).back
             .then.align.top.right.front
             .to(plate_with_holes).top.front.right

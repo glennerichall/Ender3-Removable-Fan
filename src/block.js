@@ -6,17 +6,18 @@ const {
     cylinderElliptic, roundedRectangle,
     polygon, cuboid, roundedCuboid, sphere
 } = require('@jscad/modeling').primitives;
-const {union, subtract} = require('@jscad/modeling').booleans;
+const {union, subtract} = require('../libs/booleans');
 const {hullChain, hull} = require('@jscad/modeling').hulls;
 const {transform, translate} = require('@jscad/modeling').transforms;
 const {poly3, path2} = require('@jscad/modeling').geometries;
-const {roundRect} = require("../libs/primitives");
+const {mat4, plane, vec3, vec2} = require('@jscad/modeling').maths;
+
+const {roundRect, cubeFromBoundsOf} = require("../libs/primitives");
 const {bounds, toVec2, toVec3, ellipse_path_2d, lin, expand} = require("../libs/utils");
 const {drill} = require("../libs/holes");
 const {align, move, mirror, rotate, scale} = require("../libs/transforms");
 const pogo = require("../vitamins/pogo");
-const {mat4, plane, vec3, vec2} = require('@jscad/modeling').maths;
-
+const {box} = require('../libs/geometry');
 const blower = require('./blower');
 const {tolerance, epsilon} = require("./definitions");
 
@@ -102,7 +103,7 @@ function getConstants(plate_def = plate.getConstants()) {
     return constants;
 }
 
-function createHolder(heatblock, e_plate, plate_with_holes, defs, blower_defs) {
+function create_holder(heatblock, e_plate, plate_with_holes, defs, blower_defs) {
     // create the blower to substract from the holder
     blower_defs.depth += 2 * defs.blower.thick
 
@@ -132,7 +133,6 @@ function createHolder(heatblock, e_plate, plate_with_holes, defs, blower_defs) {
             blower_holder_dims.height,
             blower_holder_dims.width,
         ],
-        roundRadius: 2
     });
 
     // align the holder to the full depth blower
@@ -140,6 +140,23 @@ function createHolder(heatblock, e_plate, plate_with_holes, defs, blower_defs) {
         .to(blower1).left.bottom.centerZ
         .then.move.left(defs.blower.margins.z)
         .apply();
+
+    // create lips to hold and clip blower to holder
+    let lips = cuboid({
+        size: [
+            blower_defs.exit + defs.blower.margins.z,
+            2,
+            blower_holder_dims.width,
+        ]
+    });
+
+    lips = align(lips).right.bottom.centerZ
+        .to(blower2).left.bottom.centerZ
+        .then.move.right(blower_defs.exit + tolerance + defs.blower.thick)
+        .apply();
+
+    // return union(lips, blower2)
+    lips = subtract(lips, blower2);
 
     // create a cylinder to snap in the blower lug
     let c = cylinder({
@@ -157,12 +174,16 @@ function createHolder(heatblock, e_plate, plate_with_holes, defs, blower_defs) {
     // remove the real depth blower from the cylinder
     c = subtract(c, blower2);
 
-    [left_blower_holder, c] = rotate(left_blower_holder).x()
+    [left_blower_holder, c, lips] = rotate(left_blower_holder).x()
         .yz(-Math.PI / 2).then.align.bottom.back
-        .to(plate_with_holes).bottom.back.applyToTargetAnd(c);
+        .to(plate_with_holes).bottom.back.applyToTargetAnd(c, lips);
+
+    // lips = align(lips).bottom.back.centerX
+    //     .to(left_blower_holder).bottom.back.centerX
+    //     .apply();
 
     // add the cylinder to the holder
-    left_blower_holder = union(c, left_blower_holder);
+    left_blower_holder = union(c, left_blower_holder, lips);
 
     return left_blower_holder;
 }
@@ -271,10 +292,10 @@ function duct_loft(heatblock,
     return loft;
 }
 
-function createDuct(heatblock,
-                    left_blower_holder,
-                    defs,
-                    blower_defs) {
+function create_duct(heatblock,
+                     left_blower_holder,
+                     defs,
+                     blower_defs) {
     // create the loft for the hole of the duct
     let duct_hole_loft = cuboid({
         size: [
@@ -285,9 +306,10 @@ function createDuct(heatblock,
     });
 
     // create the loft for the the duct walls
+    const left_blower_holder_bounds = bounds(left_blower_holder);
     let duct_wall_loft = cuboid({
         size: [
-            blower_defs.depth,
+            left_blower_holder_bounds.width,
             0.1,
             blower_defs.exit
         ]
@@ -307,12 +329,17 @@ function createDuct(heatblock,
             nozzle_exit_height: 9 + 2 * blower_defs.thick
         });
 
+    duct_walls1 = box(duct_walls1, 'duct walls');
+
     // we need to have material down to the build plate. So clone and move beyond the build plate.
     let duct_walls2 = move(duct_walls1).backward(defs.blower.margins.z / 2).apply();
     let duct_walls3 = move(duct_walls1).backward(defs.blower.margins.z + blower_defs.thick).apply();
 
+
     // create a big loft of the 3 shapes
     let duct_walls = union(duct_walls1, duct_walls2, duct_walls3);
+
+    // console.log(duct_walls)
 
     // create a cutting shape, the size of the duct union and place it
     // from the build plate surface
@@ -323,11 +350,12 @@ function createDuct(heatblock,
         .apply();
 
     // done
+    // return [ colorize([1,0,0], cut), duct_hole_loft, colorize([0,0,0,0.5], duct_walls),]
     return subtract(duct_walls, cut, duct_hole_loft);
 }
 
 
-function createFan(
+function create_fan(
     heatblock,
     defs
 ) {
@@ -378,7 +406,7 @@ function createFan(
             holes.push(h1, h2);
         }
     }
-    fan = subtract(fan, ...holes);
+    // fan = subtract(fan, ...holes);
 
     // drill hole for fan
     let duct = cylinder({height: defs.fan.depth, radius: (fan_width / 2 - 1)});
@@ -423,10 +451,37 @@ function createFan(
     return fan;
 }
 
+function create_pogo_for_blower(right_blower_holder, _pogo_, defs, blower_defs) {
+    const {depth} = defs;
+    let pogo_hole = pogo.create_hole({depth});
+    let pogo_fitting = pogo.create_fitting({depth});
+    _pogo_ = align(_pogo_).back.to(right_blower_holder).back.apply();
+    [pogo_hole, pogo_fitting] = align([pogo_hole, pogo_fitting]).centerX.centerY
+        .to(_pogo_).centerX.centerY
+        .then.align.back.to(pogo_fitting).back
+        .apply();
+
+    const r = bounds(pogo_fitting).height / 2;
+    let c = cylinder({radius: r, height: depth});
+    let c1 = align(c).back.centerX.bottom
+        .to(right_blower_holder)
+        .back.top.centerX
+        .then.move.down(blower_defs.hole_diam / 2 + r + defs.blower.thick)
+        .apply();
+
+    let c2 = align(c).back.centerX.centerY
+        .to(pogo_fitting)
+        .back.bottom.centerX
+        .apply();
+
+    // return [pogo_hole, colorize([0,0,0,0.5],pogo_fitting)];
+    return subtract(union(pogo_fitting, hull(c2, c1)), pogo_hole);
+}
+
 function create(
     heatblock,
     e_plate,
-    pogo,
+    _pogo_,
     {
         defs = getConstants(),
         blower_defs = blower.getConstants(),
@@ -438,14 +493,13 @@ function create(
     let base_plate = extrudeLinear({height: defs.depth}, roundRect(defs.base));
     let plate_with_holes = drill(defs.holes, base_plate);
 
-    let left_blower_holder = createHolder(heatblock, e_plate, plate_with_holes, defs, blower_defs);
-
+    let left_blower_holder = create_holder(heatblock, e_plate, plate_with_holes, defs, blower_defs);
 
     // align the base plate to the e_plate
     plate_with_holes = align(plate_with_holes).top.left
         .to(e_plate).top.left.apply();
 
-    let fan = createFan(heatblock, defs);
+    let fan = create_fan(heatblock, defs);
 
     // align the blower holder to the fan and the base plate
     // considering margins
@@ -457,7 +511,7 @@ function create(
         .apply();
 
     // create the duct
-    let left_duct = createDuct(heatblock, left_blower_holder, defs, blower_defs,);
+    let left_duct = create_duct(heatblock, left_blower_holder, defs, blower_defs,);
 
     // create the right blower holder reflecting from center of fan
     let [right_blower_holder, right_duct] = mirror(left_blower_holder)
@@ -469,9 +523,15 @@ function create(
     }
 
     if (hasBlowers) {
+
+
+        let p = create_pogo_for_blower(right_blower_holder, _pogo_, defs, blower_defs);
+
         block = union(block,
             left_blower_holder,
-            right_blower_holder);
+            right_blower_holder,
+            p);
+
     }
 
     helpers.placeBlowerLeft = placeBlower(left_blower_holder);

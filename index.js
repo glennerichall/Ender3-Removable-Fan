@@ -2,15 +2,17 @@ const {union, subtract} = require('@jscad/modeling').booleans;
 const {transform} = require('@jscad/modeling').transforms;
 const {path2} = require('@jscad/modeling').geometries;
 const {vectorText} = require('@jscad/modeling').text;
-const plate = require('./src/plate');
-const block = require('./src/block');
+
 const {align, mirror, rotate, move, group} = require("./libs/transforms");
 const {e_plate_def, tolerance} = require("./src/definitions");
+const plate = require('./src/plate');
+const block = require('./src/block');
 const pogo = require("./vitamins/pogo");
 const blower = require('./src/blower');
 const heatblock = require('./vitamins/heatblock');
 const eplate = require('./vitamins/eplate');
 const {bounds} = require("./libs/utils");
+const {unbox} = require('./libs/geometry');
 
 const segmentToPath = (segment) => path2.fromPoints({close: false}, segment);
 const paths = outlines => outlines.map((segment) => segmentToPath(segment));
@@ -42,23 +44,13 @@ function loadVitamins() {
     ];
 }
 
-function unpack(geometry) {
-    if (Array.isArray(geometry)) {
-        return geometry.map(x => unpack(x));
-    }
-
-    if (geometry?.isPacked) {
-        return geometry.getGeometry();
-    }
-
-    return geometry;
-}
 
 const main = (params) => {
     console.clear();
     const helpers = {};
 
     const plate_def = plate.getConstants();
+
     let vitamins = loadVitamins();
     let [
         _heatblock_,
@@ -75,10 +67,11 @@ const main = (params) => {
         .applyToTargetAnd(_pogo_);
 
 
+    let blockPogo = mirror(_pogo_).front.apply();
     let [fanBlock, ...others] = block.create(
         _heatblock_,
         _eplate_,
-        _pogo_, {helpers, ...params});
+        blockPogo, {helpers, ...params});
 
     const mat = align(fanBlock).back.to(backPlate).front
         .then.move.forward(tolerance).getMatrix();
@@ -96,7 +89,8 @@ const main = (params) => {
         vitamins = [
             _heatblock_,
             _eplate_,
-            _pogo_
+            _pogo_,
+            blockPogo
         ];
 
         if (params.hasBlowers) {
@@ -113,7 +107,9 @@ const main = (params) => {
             return [backPlate, fanBlock, ...others];
         case 'preview':
             const res = params.showPrint ? [backPlate, fanBlock, ...vitamins, ...others] : vitamins;
-            return group(res).then.rotate.x().apply();
+            return group(res).then.rotate.x()
+                .then.align.back
+                .toSelf.centerZ.apply();
         case 'block':
             return fanBlock;
         case 'plate':
@@ -121,12 +117,14 @@ const main = (params) => {
         case 'duct':
             return others[0];
         case 'cap':
-            return group(createText('Cap is not ready')).then.move.to.origin.apply();
+            return group(createText('Cap is not ready'))
+                .then.move.to.origin.apply();
     }
-    return
+    return group(createText('Dup'))
+        .then.move.to.origin.apply();
 }
 
 module.exports = {
-    main: params => unpack(main(params)),
+    main: params => unbox(main(params)),
     getParameterDefinitions
 }

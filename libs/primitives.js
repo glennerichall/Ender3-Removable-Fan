@@ -1,5 +1,5 @@
-const {rectangle, circle} = require('@jscad/modeling').primitives;
-const {expand, align_tl2tl, Vector2} = require('./utils');
+const {rectangle, circle, cuboid} = require('@jscad/modeling').primitives;
+const {expand, align_tl2tl, Vector2, toVec3, bounds} = require('./utils');
 const {union} = require('@jscad/modeling').booleans;
 const {colorize} = require('@jscad/modeling').colors;
 const {mat4, plane} = require('@jscad/modeling').maths;
@@ -98,7 +98,13 @@ function roundRect({
     return union(center, ...parts);
 }
 
+function cubeFromBoundsOf(geometry) {
+    const bds = bounds(geometry);
+    return cuboid({size: expand(bds), center: toVec3(bds.center).expand()});
+}
+
 module.exports = {
     roundRect,
-    applyTransforms
+    applyTransforms,
+    cubeFromBoundsOf
 }

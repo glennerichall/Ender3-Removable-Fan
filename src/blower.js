@@ -82,16 +82,8 @@ function create(def = {}) {
     return colorize([0.2, 0.2, 0.2], b);
 }
 
-function newBlower(defs) {
-    return rotate(create(defs))
-        .x()
-        .yz(-Math.PI / 2)
-        .apply();
-}
-
 
 module.exports = {
     create,
-    newBlower,
     getConstants
 }

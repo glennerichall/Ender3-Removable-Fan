@@ -57,18 +57,20 @@ function combine(a, b) {
     return {top, left, front, back, bottom, right};
 }
 
-function bounds(shape) {
-    if (Array.isArray(shape)) {
-        if (shape.length >= 1) {
-            let current = bounds(shape[0]);
-            for (let i = 1; i < shape.length; i++) {
-                current = combine(current, bounds(shape[i]));
+function bounds(geometry) {
+    if (Array.isArray(geometry)) {
+        if (geometry.length >= 1) {
+            let current = bounds(geometry[0]);
+            for (let i = 1; i < geometry.length; i++) {
+                current = combine(current, bounds(geometry[i]));
             }
             return dimensionsForBounds(current);
         }
         return null;
+    } else if (geometry.isBoxed) {
+        return geometry.getBounds();
     }
-    const measurements = measureBoundingBox(shape);
+    const measurements = measureBoundingBox(geometry);
     return boundsForMeasurments(measurements);
 
 }

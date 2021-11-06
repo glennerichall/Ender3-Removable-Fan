@@ -1,5 +1,5 @@
 const {rectangle, circle, cylinder, cylinderElliptic} = require('@jscad/modeling').primitives;
-const {union, subtract} = require('@jscad/modeling').booleans;
+const {union, subtract} = require('./booleans');
 const {bounds, toVec2} = require("./utils");
 
 function hole(properties, geometry) {

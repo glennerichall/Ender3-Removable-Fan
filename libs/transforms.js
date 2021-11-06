@@ -2,6 +2,10 @@ const {bounds, toVec3} = require('./utils');
 const {transform} = require('@jscad/modeling').transforms;
 const {mat4, plane} = require('@jscad/modeling').maths;
 
+function multiplyMatrices(m1, m2) {
+    return mat4.multiply(mat4.create(), m1, m2);
+}
+
 function getBounds(geometry) {
     return geometry instanceof GeometryGroup ? bounds(geometry.geometries) : bounds(geometry);
 }
@@ -10,6 +14,8 @@ function applyTransform(matrix, ...geometries) {
     const tr = geometries.map(geometry => {
         if (geometry instanceof GeometryGroup) {
             return new GeometryGroup(transform(matrix, ...geometry.geometries));
+        } else if (geometry.isBoxed) {
+            return transform(matrix, geometry.getGeometry());
         } else {
             return transform(matrix, geometry);
         }
@@ -26,6 +32,7 @@ function unpack(geometry) {
         return geometry;
     }
 }
+
 
 class Chainable {
     constructor(geometry, matrix) {
@@ -76,9 +83,9 @@ class Transform {
     }
 
     getMatrix() {
-        return mat4.multiply(mat4.create(),
+        return this.multiplyMatrices(
             this.getBaseMatrix(),
-            this.matrix,
+            this.matrix
         );
     }
 
@@ -99,7 +106,23 @@ class Transform {
     }
 
     transform(...args) {
-        return unpack(applyTransform(this.getMatrix(), ...args));
+        return this.unpack(this.applyTransform(this.getMatrix(), ...args));
+    }
+
+    multiplyMatrices(m1, m2) {
+        return multiplyMatrices(m1, m2);
+    }
+
+    getBounds(geometry) {
+        return getBounds(geometry);
+    }
+
+    applyTransform(matrix, ...geometries) {
+        return applyTransform(matrix, ...geometries);
+    }
+
+    unpack(geometry) {
+        return unpack(geometry);
     }
 }
 
@@ -107,7 +130,8 @@ class TranslationTransform extends Transform {
     constructor(geometry, matrix) {
         super(geometry, matrix);
         this.translation = [0, 0, 0];
-        this.bounds = this.matrix && geometry && getBounds(applyTransform(this.matrix, geometry));
+        this.bounds = this.matrix && geometry &&
+            this.getBounds(this.applyTransform(this.matrix, geometry));
     }
 
     invert() {
@@ -126,7 +150,7 @@ class ReflectionTransform extends Transform {
     constructor(geometry, matrix) {
         super(geometry, matrix);
         this.plane = plane.create();
-        this.bounds = bounds(transform(this.matrix, geometry));
+        this.bounds = this.getBounds(this.applyTransform(this.matrix, geometry));
     }
 
     get top() {
@@ -417,25 +441,31 @@ class ScaleTransform extends Transform {
     }
 }
 
-const AlignReference = Parent => class extends Thenable(Parent) {
+const AlignReference = Parent => class extends Parent {
     constructor(source, reference) {
         super(reference);
-        this.source = source;
+        this.source = source
     }
 
     getMatrix() {
         const ms = this.source.invert().getMatrix();
         const mr = super.getMatrix();
-        return mat4.multiply(mat4.create(), mr, ms);
+        return this.source.multiplyMatrices(mr, ms);
+    }
+
+    applyTransform(matrix, ...geometries) {
+        return this.source && this.source.applyTransform(matrix, ...geometries) ||
+            super.applyTransform(matrix, ...geometries);
     }
 
     getGeometry() {
-        return this.source.getGeometry();
+        return this.source && this.source.getGeometry() || super.getGeometry();
     }
 }
 
-const AlignReferenceBounds = AlignReference(FromBoundsTranslation);
-const AlignReferenceMove = AlignReference(PositionTransform);
+const ThenableAlignReference = Parent => Thenable(AlignReference(Parent))
+const AlignReferenceBounds = ThenableAlignReference(FromBoundsTranslation);
+const AlignReferenceMove = ThenableAlignReference(PositionTransform);
 
 const AlignSource = (Parent) => class extends Parent {
     constructor(target, matrix) {
@@ -447,16 +477,24 @@ const AlignSource = (Parent) => class extends Parent {
     }
 
     to(reference) {
+        // const mat = this.invert().getMatrix();
+        // return reference !== undefined ? move(this.geometry, mat);
+
         return reference !== undefined ?
             new AlignReferenceBounds(this, reference) :
             new AlignReferenceMove(this, this.geometry);
     }
 }
 
-const Composite = (TargetClass, ignore = []) => {
+const Composite = (TargetClass, {
+    ignore = []
+} = {}) => {
     const Clazz = class {
-        constructor(targets) {
-            this.targets = targets?.map(target => new TargetClass(target));
+        constructor(targets, matrices) {
+            // console.log(targets)
+            this.targets = targets?.map((target, i) => matrices ?
+                new TargetClass(target, matrices[i]) :
+                new TargetClass(target));
             this.geometry = targets;
             this.isComposite = true;
         }
@@ -468,6 +506,10 @@ const Composite = (TargetClass, ignore = []) => {
         getGeometry() {
             return this.targets.map(target => target.getGeometry());
         }
+
+        getMatrix() {
+            return this.targets.map(target => target.getMatrix());
+        }
     }
 
     // no sense to applyToTargetAnd and applyTo on composite
@@ -475,7 +517,7 @@ const Composite = (TargetClass, ignore = []) => {
     // apply is an end point
     ignore.push('getGeometry', 'apply',
         'applyToTargetAnd', 'applyTo',
-        'constructor');
+        'constructor', 'getMatrix');
 
     let proto = TargetClass.prototype;
     while (proto && proto !== Object.prototype) {
@@ -487,14 +529,15 @@ const Composite = (TargetClass, ignore = []) => {
             if (descriptor?.get) {
                 Object.defineProperty(Clazz.prototype, method, {
                     get: function () {
+                        // console.log(method)
                         this.targets.map(target => target[method]);
                         return this;
                     }
                 });
             } else if (typeof TargetClass.prototype[method] === 'function') {
                 Clazz.prototype[method] = function (...args) {
-                    console.log(method)
-                    console.log(this.targets)
+                    // console.log(method)
+                    // console.log(this.targets)
                     this.targets.map(target => target[method](...args));
                     return this;
                 }
@@ -506,9 +549,46 @@ const Composite = (TargetClass, ignore = []) => {
     return Clazz;
 }
 
+const CompositedAlignReference = Parent => class extends Thenable(Composite(AlignReference(Parent))) {
+    constructor(source, geometry) {
+        super(source, geometry);
+    }
+};
+const AlignReferenceBoundsComposite = CompositedAlignReference(FromBoundsTranslation);
+const AlignReferenceMoveComposite = CompositedAlignReference(PositionTransform);
+
+class AlignSourceComposite extends AlignSource(Composite(FromBoundsTranslation)) {
+    constructor(targets, matrices) {
+        super(targets, matrices);
+    }
+
+
+    multiplyMatrices(m1, m2) {
+        const res = new Array(m2.length);
+        for (let i = 0; i < m2.length; i++) {
+            res[i] = multiplyMatrices(m1, m2[i]);
+        }
+        return res;
+    }
+
+    applyTransform(matrix, ...geometriesIgnored) {
+        return this.targets.map((target, i) => target.applyTransform(matrix[i], target.getGeometry()));
+    }
+
+    // to(reference) {
+    //         return reference !== undefined ?
+    //             new AlignReferenceBoundsComposite(this, reference) :
+    //             new AlignReferenceMoveComposite(this, this.geometry);
+    //
+    //     const targets = this.targets.map(target => target.to(reference));
+    //     return new AlignReferenceComposite();
+    // }
+}
+
+
 class MoveComposite extends Thenable(Composite(MoveTransform)) {
-    constructor(targets) {
-        super(targets);
+    constructor(targets, matrices) {
+        super(targets, matrices);
     }
 
     get to() {
@@ -528,7 +608,8 @@ class GeometryGroup {
 
 const Group = Thenable(Transform);
 
-const AlignAll = AlignSource(Composite(FromBoundsTranslation));
+// const AlignAll = Composite(AlignSource(FromBoundsTranslation));
+const AlignAll = AlignSourceComposite;
 const MoveAll = MoveComposite;
 const PositionAll = Thenable(Composite(PositionTransform));
 const MirrorAll = Thenable(Composite(ReflectionTransform));
