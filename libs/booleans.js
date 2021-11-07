@@ -2,8 +2,6 @@ const {union, subtract, intersect} = require('@jscad/modeling').booleans;
 const {unbox} = require('./geometry');
 
 function union_(...args) {
-    console.log(args)
-    console.log(unbox(args))
     return union(...unbox(args));
 }
 

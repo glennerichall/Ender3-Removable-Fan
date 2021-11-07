@@ -12,10 +12,8 @@ function getBounds(geometry) {
 
 function applyTransform(matrix, ...geometries) {
     const tr = geometries.map(geometry => {
-        if (geometry instanceof GeometryGroup) {
-            return new GeometryGroup(transform(matrix, ...geometry.geometries));
-        } else if (geometry.isBoxed) {
-            return transform(matrix, geometry.getGeometry());
+        if (geometry.isBoxed) {
+            return geometry.transform(matrix);
         } else {
             return transform(matrix, geometry);
         }
@@ -603,6 +601,19 @@ class MoveComposite extends Thenable(Composite(MoveTransform)) {
 class GeometryGroup {
     constructor(geometries) {
         this.geometries = geometries;
+    }
+
+    get isBoxed() {
+        return true;
+    }
+
+    getGeometry() {
+        return this.geometries;
+    }
+
+    transform(matrix) {
+        return new GeometryGroup(this.geometries.map(
+            geometry => applyTransform(matrix, geometry)));
     }
 }
 

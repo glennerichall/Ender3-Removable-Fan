@@ -337,9 +337,8 @@ function create_duct(heatblock,
 
 
     // create a big loft of the 3 shapes
-    let duct_walls = union(duct_walls1, duct_walls2, duct_walls3);
-
-    // console.log(duct_walls)
+    let duct_walls = duct_walls1.debug.union(duct_walls2, duct_walls3);
+    // let duct_walls = union(duct_walls1, duct_walls2, duct_walls3);
 
     // create a cutting shape, the size of the duct union and place it
     // from the build plate surface
@@ -351,7 +350,8 @@ function create_duct(heatblock,
 
     // done
     // return [ colorize([1,0,0], cut), duct_hole_loft, colorize([0,0,0,0.5], duct_walls),]
-    return subtract(duct_walls, cut, duct_hole_loft);
+    // return subtract(duct_walls, cut, duct_hole_loft);
+    return duct_walls.subtract(cut, duct_hole_loft);
 }
 
 
@@ -523,8 +523,6 @@ function create(
     }
 
     if (hasBlowers) {
-
-
         let p = create_pogo_for_blower(right_blower_holder, _pogo_, defs, blower_defs);
 
         block = union(block,

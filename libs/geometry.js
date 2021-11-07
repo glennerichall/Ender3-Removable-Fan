@@ -20,39 +20,43 @@ function unbox(geometry) {
 class Geometry {
     constructor(target, name = '') {
         this.target = target;
-        this.operations = [];
         this.name = name;
-        this.cachedGeometry = null;
     }
 
     get isBoxed() {
         return true;
     }
 
-    _push(op) {
-        this.operations.push(op);
-        this.cachedGeometry = null;
+    get debug() {
         return this;
     }
 
-    transform(matrix) {
-        return this._push(geometry => transform(matrix, geometry));
+    getNewName(args, op) {
+        op = ` (${op}) `;
+        return this.name + op + args.map(arg => arg.isBoxed && arg.name || 'primitive').join(op);
+    }
+
+    transform(matrix, name) {
+        return new Geometry(transform(matrix, this.target), name || (this.name + ' transformed'));
     }
 
     colorize(color) {
-        return this._push(geometry => colorize(color, geometry));
+        return new Geometry(colorize(color, this.target), name || (this.name + ' colorized'));
     }
 
     union(...args) {
-        return this._push(geometry => union(geometry, ...unbox(args)));
+        return new Geometry(union(this.target, ...unbox(args)),
+            name || this.getNewName(args, 'v'));
     }
 
-    difference(...args) {
-        return this._push(geometry => subtract(geometry, ...unbox(args)));
+    subtract(...args) {
+        return new Geometry(subtract(this.target, ...unbox(args)),
+            name || this.getNewName(args, '-'));
     }
 
-    intersection(...args) {
-        return this._push(geometry => intersect(geometry, ...unbox(args)));
+    intersect(...args) {
+        return new Geometry(intersect(this.target, ...unbox(args)),
+            name || this.getNewName(args,'^'));
     }
 
     getBounds() {
@@ -60,10 +64,7 @@ class Geometry {
     }
 
     getGeometry() {
-        if(this.cachedGeometry) return this.cachedGeometry;
-        return this.cachedGeometry = this.operations.reduce((res, op) => {
-            return op(res);
-        }, this.target);
+        return this.target;
     }
 }
 
@@ -76,5 +77,5 @@ function box(geometry, name) {
 
 module.exports = {
     box,
-    unbox
+    unbox,
 }
