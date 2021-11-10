@@ -22,6 +22,7 @@ function getConstants() {
         holes: [[4.3, 45.4], [47.3, 7.4]],
         hole_diam: 4.5,
         thick: 1.2,
+        duct: 0
     }
     return contants;
 }
@@ -67,7 +68,7 @@ function create(def = {}) {
     }
     const shape = union(
         hull(...body),
-        rectangle({size: [exit, ay], center: [exit / 2, ay / 2]})
+        rectangle({size: [exit, ay + def.duct], center: [exit / 2, ay / 2 - def.duct / 2]})
     );
 
     const lugs = [];

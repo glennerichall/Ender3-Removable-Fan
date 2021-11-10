@@ -16,8 +16,8 @@ function hole(properties, geometry) {
         ...properties
     });
     if (properties.chamfer) {
-        const startRadius = toVec2(properties.radius).expand();
-        const endRadius = toVec2(properties.radius + properties.chamfer).expand();
+        const startRadius = toVec2(properties.radius).toArray();
+        const endRadius = toVec2(properties.radius + properties.chamfer).toArray();
         const chamfer = cylinderElliptic({
             height: properties.chamfer,
             center: [center[0], center[1], height - properties.chamfer / 2],

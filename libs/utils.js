@@ -2,11 +2,56 @@ const {measureBoundingBox} = require('@jscad/modeling').measurements;
 const {translate} = require('@jscad/modeling').transforms;
 const {vec3} = require('@jscad/modeling').maths;
 
+class Bounds {
+    constructor({
+                    width, height, depth,
+                    top, left, bottom,
+                    right, front, back, center
+                }) {
+        this.width = width;
+        this.height = height;
+        this.depth = depth;
+        this.top = top;
+        this.left = left;
+        this.bottom = bottom;
+        this.right = right;
+        this.front = front;
+        this.back = back;
+        this.center = center;
+    }
 
-function expand({width, height, depth, x, y, z}) {
+    toArray() {
+        return toArray(this);
+    }
+
+    expand(dims) {
+        if (typeof dims === 'number') {
+            dims = {
+                width: dims,
+                height: dims,
+                depth: dims
+            };
+        }
+        return new Bounds(expand(this, dims));
+    }
+}
+
+function toArray({width, height, depth, x, y, z}) {
     return width !== undefined ?
         depth !== undefined ? [width, height, depth] : [width, height] :
         z !== undefined ? [x, y, z] : [x, y];
+}
+
+function expand(bounds, {width = 0, height = 0, depth = 0}) {
+    bounds = {
+        ...bounds
+    };
+
+    bounds.width += width;
+    bounds.height += height;
+    bounds.depth += depth;
+
+    return bounds;
 }
 
 function dimensionsForBounds(
@@ -71,7 +116,7 @@ function bounds(geometry) {
         return geometry.getBounds();
     }
     const measurements = measureBoundingBox(geometry);
-    return boundsForMeasurments(measurements);
+    return new Bounds(boundsForMeasurments(measurements));
 
 }
 
@@ -136,8 +181,8 @@ class Vector2 {
         return new Vector2(this);
     }
 
-    expand() {
-        return expand(this);
+    toArray() {
+        return toArray(this);
     }
 }
 
@@ -181,12 +226,12 @@ class Vector3 {
         return new Vector3(this);
     }
 
-    expand() {
-        return expand(this);
+    toArray() {
+        return toArray(this);
     }
 
     rotateY(angle) {
-        const v = vec3.rotateY(vec3.create(), this.expand(), [0, 0, 0], angle);
+        const v = vec3.rotateY(vec3.create(), this.toArray(), [0, 0, 0], angle);
         this.x = v[0];
         this.y = v[1];
         this.z = v[2];
@@ -194,7 +239,7 @@ class Vector3 {
     }
 
     angle(v) {
-        return vec3.angle(this.expand(), toVec3(v).expand());
+        return vec3.angle(this.toArray(), toVec3(v).toArray());
     }
 }
 
@@ -218,6 +263,7 @@ function ellipse_path_2d(a, b, t0, t1, steps = 100) {
 }
 
 module.exports = {
+    toArray,
     expand,
     bounds,
     Vector2,

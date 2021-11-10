@@ -1,5 +1,5 @@
 const {union, subtract} = require('@jscad/modeling').booleans;
-const {transform} = require('@jscad/modeling').transforms;
+const {transform} = require('./libs/transforms');
 const {path2} = require('@jscad/modeling').geometries;
 const {vectorText} = require('@jscad/modeling').text;
 
@@ -12,7 +12,8 @@ const blower = require('./src/blower');
 const heatblock = require('./vitamins/heatblock');
 const eplate = require('./vitamins/eplate');
 const {bounds} = require("./libs/utils");
-const {unbox} = require('./libs/geometry');
+const {unbox, box,} = require('./libs/geometry');
+const {getOptions} = require("./libs/configs");
 
 const segmentToPath = (segment) => path2.fromPoints({close: false}, segment);
 const paths = outlines => outlines.map((segment) => segmentToPath(segment));
@@ -22,14 +23,30 @@ const getParameterDefinitions = () => {
     return [
         {
             name: 'print', type: 'choice', caption: 'Print:', values: ['preview', 'block', 'plate', 'cap', 'duct', 'all',],
-            captions: ['Preview (shows vitamins)', 'Block', 'Plate', 'Cap', 'Duct', 'All',], initial: 'preview'
+            captions: ['Preview', 'Block', 'Plate', 'Cap', 'Duct', 'All',], initial: 'preview'
         },
 
         {name: 'hasFan', type: 'checkbox', checked: true, caption: 'Has Fan:'},
         {name: 'hasBlowers', type: 'checkbox', checked: true, caption: 'Has blowers:'},
 
+        {name: 'Blower', type: 'group', caption: 'Blower'},
+
+        {name: 'blower_margins_x', type: 'float', initial: block.getConstants().blower.margins.x, caption: 'Distance from fan'},
+        {name: 'blower_margins_y', type: 'float', initial: block.getConstants().blower.margins.y, caption: 'Margin Z'},
+        {name: 'blower_margins_z', type: 'float', initial: block.getConstants().blower.margins.z, caption: 'Distance from heatblock plate'},
+
+        {name: 'Duct', type: 'group', caption: 'Blower duct exit'},
+
+        // the width and heights are inverted since there is a rotation for the final preview
+        {name: 'blower_nozzle_exit_width', type: 'float', initial: block.getConstants().blower.nozzle_exit.width, caption: 'Height'},
+        {name: 'blower_nozzle_exit_height', type: 'float', initial: block.getConstants().blower.nozzle_exit.height, caption: 'width'},
+        {name: 'blower_nozzle_exit_margin_x', type: 'float', initial: block.getConstants().blower.nozzle_exit.margin_x, caption: 'Distance to heat block'},
+        {name: 'blower_nozzle_exit_offset_y', type: 'float', initial: block.getConstants().blower.nozzle_exit.offset.y, caption: 'Distance to nozzle bottom'},
+
+        {name: 'Other', type: 'group', caption: 'Other options'},
         {name: 'showPrint', type: 'checkbox', checked: true, caption: 'Show printable:'},
         {name: 'showVitamins', type: 'checkbox', checked: true, caption: 'Show vitamins:'},
+        {name: 'enableDebug', type: 'checkbox', checked: false, caption: 'Debug enabled:'},
 
 
     ]
@@ -47,6 +64,9 @@ function loadVitamins() {
 
 const main = (params) => {
     console.clear();
+
+    getOptions().debugEnabled = params.enableDebug;
+
     const helpers = {};
 
     const plate_def = plate.getConstants();
@@ -68,10 +88,23 @@ const main = (params) => {
 
 
     let blockPogo = mirror(_pogo_).front.apply();
+
+    const block_defs = block.getConstants(plate_def);
+    block_defs.blower.margins.x = params.blower_margins_x;
+    block_defs.blower.margins.y = params.blower_margins_y;
+    block_defs.blower.margins.z = params.blower_margins_z;
+
+    block_defs.blower.nozzle_exit.margin_x = params.blower_nozzle_exit_margin_x;
+    block_defs.blower.nozzle_exit.offset.y = params.blower_nozzle_exit_offset_y;
+
+    block_defs.blower.nozzle_exit.width = params.blower_nozzle_exit_width;
+    block_defs.blower.nozzle_exit.height = params.blower_nozzle_exit_height;
+
+
     let [fanBlock, ...others] = block.create(
         _heatblock_,
         _eplate_,
-        blockPogo, {helpers, ...params});
+        blockPogo, {defs: block_defs, helpers, ...params});
 
     const mat = align(fanBlock).back.to(backPlate).front
         .then.move.forward(tolerance).getMatrix();
@@ -106,10 +139,11 @@ const main = (params) => {
         case 'all':
             return [backPlate, fanBlock, ...others];
         case 'preview':
-            const res = params.showPrint ? [backPlate, fanBlock, ...vitamins, ...others] : vitamins;
-            return group(res).then.rotate.x()
+            let res = params.showPrint ? [backPlate, fanBlock, ...vitamins, ...others] : vitamins;
+            res = group(res).then.rotate.x()
                 .then.align.back
                 .toSelf.centerZ.apply();
+            return res;
         case 'block':
             return fanBlock;
         case 'plate':
@@ -124,7 +158,20 @@ const main = (params) => {
         .then.move.to.origin.apply();
 }
 
+function randomColor() {
+    return [Math.random(), Math.random(), Math.random(), 0.8];
+}
+
+function unpackDebug(res) {
+    console.log(res)
+    res = box(res);
+    const debug = res.findDebug().map(x => x.colorize(randomColor())).reverse();
+    res = unbox(res);
+    if (!Array.isArray(res)) res = [res];
+    return res.concat(unbox(debug));
+}
+
 module.exports = {
-    main: params => unbox(main(params)),
+    main: params => unpackDebug(main(params)),
     getParameterDefinitions
 }

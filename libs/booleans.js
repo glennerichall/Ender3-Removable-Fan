@@ -1,16 +1,18 @@
-const {union, subtract, intersect} = require('@jscad/modeling').booleans;
-const {unbox} = require('./geometry');
+const {unbox, box} = require('./geometry');
 
 function union_(...args) {
-    return union(...unbox(args));
+    args = box(args);
+    return args[0].union(...args.slice(1));
 }
 
 function subtract_(...args) {
-    return subtract(...unbox(args));
+    args = box(args);
+    return args[0].subtract(...args.slice(1));
 }
 
 function intersect_(...args) {
-    return intersect(...unbox(args));
+    args = box(args);
+    return args[0].intersect(...args.slice(1));
 }
 
 module.exports = {

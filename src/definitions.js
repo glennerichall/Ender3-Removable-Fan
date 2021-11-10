@@ -14,9 +14,10 @@ const magnet_def = {
     radius: 4
 }
 
+
 module.exports = {
     e_plate_def,
     magnet_def,
     tolerance,
-    epsilon
+    epsilon,
 }

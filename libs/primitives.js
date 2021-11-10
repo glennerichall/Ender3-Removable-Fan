@@ -1,5 +1,6 @@
-const {rectangle, circle, cuboid} = require('@jscad/modeling').primitives;
-const {expand, align_tl2tl, Vector2, toVec3, bounds} = require('./utils');
+const {rectangle, circle, cuboid, cylinder} = require('@jscad/modeling').primitives;
+const {toArray, align_tl2tl, Vector2, toVec3, bounds} = require('./utils');
+const {box} = require("./geometry");
 const {union} = require('@jscad/modeling').booleans;
 const {colorize} = require('@jscad/modeling').colors;
 const {mat4, plane} = require('@jscad/modeling').maths;
@@ -100,11 +101,21 @@ function roundRect({
 
 function cubeFromBoundsOf(geometry) {
     const bds = bounds(geometry);
-    return cuboid({size: expand(bds), center: toVec3(bds.center).expand()});
+    return cuboid({size: toArray(bds), center: toVec3(bds.center).toArray()});
+}
+
+function cuboid_({size, center = [0, 0, 0]}) {
+    return box(cuboid({size, center}));
+}
+
+function cylinder_({height, radius, center = [0,0,0]}) {
+    return box(cylinder({height,radius, center}));
 }
 
 module.exports = {
     roundRect,
     applyTransforms,
-    cubeFromBoundsOf
+    cubeFromBoundsOf,
+    cuboid: cuboid_,
+    cylinder: cylinder_
 }
