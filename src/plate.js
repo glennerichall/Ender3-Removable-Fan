@@ -6,7 +6,7 @@ const {hullChain} = require('@jscad/modeling').hulls;
 const {transform} = require('@jscad/modeling').transforms;
 
 const {box} = require('../libs/geometry');
-const {roundRect, applyTransforms} = require("../libs/primitives");
+const {roundRect, applyTransforms, cuboid} = require("../libs/primitives");
 const {drill} = require("../libs/holes");
 const {align, mirror} = require("../libs/transforms");
 
@@ -158,7 +158,6 @@ function create(defs = {}) {
 
     const loft_and_pogo = handle({...defs.pogo.loft, depth: defs.depth}, base_plate);
 
-    // const plate_with_holes = drill(defs.holes, union(base_plate, loft_and_pogo));
     const plate_with_holes = drill(defs.holes, base_plate.union(loft_and_pogo));
 
     defs.helpers.placePogo = pogo => {

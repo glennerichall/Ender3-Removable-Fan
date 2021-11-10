@@ -14,6 +14,7 @@ const eplate = require('./vitamins/eplate');
 const {bounds} = require("./libs/utils");
 const {unbox, box,} = require('./libs/geometry');
 const {getOptions} = require("./libs/configs");
+const {cuboid} = require("./libs/primitives");
 
 const segmentToPath = (segment) => path2.fromPoints({close: false}, segment);
 const paths = outlines => outlines.map((segment) => segmentToPath(segment));
@@ -22,8 +23,12 @@ const createText = text => paths(vectorText(text));
 const getParameterDefinitions = () => {
     return [
         {
-            name: 'print', type: 'choice', caption: 'Print:', values: ['preview', 'block', 'plate', 'cap', 'duct', 'all',],
-            captions: ['Preview', 'Block', 'Plate', 'Cap', 'Duct', 'All',], initial: 'preview'
+            name: 'print',
+            type: 'choice',
+            caption: 'Print:',
+            values: ['preview', 'block', 'plate', 'cap', 'duct', 'all',],
+            captions: ['Preview', 'Block', 'Plate', 'Cap', 'Duct', 'All',],
+            initial: 'preview'
         },
 
         {name: 'hasFan', type: 'checkbox', checked: true, caption: 'Has Fan:'},
@@ -31,17 +36,47 @@ const getParameterDefinitions = () => {
 
         {name: 'Blower', type: 'group', caption: 'Blower'},
 
-        {name: 'blower_margins_x', type: 'float', initial: block.getConstants().blower.margins.x, caption: 'Distance from fan'},
+        {
+            name: 'blower_margins_x',
+            type: 'float',
+            initial: block.getConstants().blower.margins.x,
+            caption: 'Distance from fan'
+        },
         {name: 'blower_margins_y', type: 'float', initial: block.getConstants().blower.margins.y, caption: 'Margin Z'},
-        {name: 'blower_margins_z', type: 'float', initial: block.getConstants().blower.margins.z, caption: 'Distance from heatblock plate'},
+        {
+            name: 'blower_margins_z',
+            type: 'float',
+            initial: block.getConstants().blower.margins.z,
+            caption: 'Distance from heatblock plate'
+        },
 
         {name: 'Duct', type: 'group', caption: 'Blower duct exit'},
 
         // the width and heights are inverted since there is a rotation for the final preview
-        {name: 'blower_nozzle_exit_width', type: 'float', initial: block.getConstants().blower.nozzle_exit.width, caption: 'Height'},
-        {name: 'blower_nozzle_exit_height', type: 'float', initial: block.getConstants().blower.nozzle_exit.height, caption: 'width'},
-        {name: 'blower_nozzle_exit_margin_x', type: 'float', initial: block.getConstants().blower.nozzle_exit.margin_x, caption: 'Distance to heat block'},
-        {name: 'blower_nozzle_exit_offset_y', type: 'float', initial: block.getConstants().blower.nozzle_exit.offset.y, caption: 'Distance to nozzle bottom'},
+        {
+            name: 'blower_nozzle_exit_width',
+            type: 'float',
+            initial: block.getConstants().blower.nozzle_exit.width,
+            caption: 'Height'
+        },
+        {
+            name: 'blower_nozzle_exit_height',
+            type: 'float',
+            initial: block.getConstants().blower.nozzle_exit.height,
+            caption: 'width'
+        },
+        {
+            name: 'blower_nozzle_exit_margin_x',
+            type: 'float',
+            initial: block.getConstants().blower.nozzle_exit.margin_x,
+            caption: 'Distance to heat block'
+        },
+        {
+            name: 'blower_nozzle_exit_offset_y',
+            type: 'float',
+            initial: block.getConstants().blower.nozzle_exit.offset.y,
+            caption: 'Distance to nozzle bottom'
+        },
 
         {name: 'Other', type: 'group', caption: 'Other options'},
         {name: 'showPrint', type: 'checkbox', checked: true, caption: 'Show printable:'},
@@ -114,6 +149,19 @@ const main = (params) => {
     } else {
         fanBlock = transform(mat, fanBlock);
     }
+
+    let wire_holder = cuboid({size: [6, 6, 4]}).subtract(
+        cuboid({size: [6, 4, 3], center: [0, 0, -1]})
+    );
+
+
+    wire_holder = align(wire_holder).back
+        .to(backPlate).front
+        .then.align.top.to(_eplate_).top
+        .then.align.centerX.to(_heatblock_).right
+        .apply();
+
+    backPlate = backPlate.union(wire_holder);
 
     if (params.showVitamins) {
         let rightBlower = helpers.placeBlowerRight(_blower_);

@@ -213,7 +213,7 @@ function create_holder(heatblock, e_plate, plate_with_holes, defs, blower_defs) 
     });
 
     // move the cylinder to the center of the lug
-    console.log( move(c).to.xy(...blower_defs.holes[0]))
+    console.log(move(c).to.xy(...blower_defs.holes[0]))
     c = move(c).to.xy(...blower_defs.holes[0])
         .then.align.centerZ.to(left_blower_holder).centerZ.apply();
 
@@ -386,7 +386,6 @@ function create_duct(heatblock,
                      blower_defs) {
 
 
-
     // create the loft for the hole of the duct
     let duct_hole_loft = create_duct_hole(heatblock,
         left_blower_holder,
@@ -422,19 +421,23 @@ function create_duct(heatblock,
 
     // let duct_walls = duct_walls1;
     // create a big loft of the 3 shapes
-    let duct_walls = duct_walls1.union(duct_walls2, duct_walls3).debug;
+    // let duct_walls = duct_walls1.debug;
+    let duct_walls = union(duct_walls2, duct_walls3);
 
     // create a cutting shape, the size of the duct union and place it
     // from the build plate surface
     let cut = cuboid({size: bounds(duct_walls).expand({height: 2, width: 2, depth: 2}).toArray()});
 
     cut = rotate(cut).then.align.front.top
-        .to(left_blower_holder.debug).bottom.back
+        .to(left_blower_holder).bottom.back
         .then.align.left.to(duct_walls).left
         .then.move.up(1).left(1)
-        .apply().debug;
+        .apply();
 
-    return duct_walls.debug.subtract(cut, duct_hole_loft.debug).setName('duct');
+    return duct_walls1.union(duct_walls.subtract(cut)).subtract(duct_hole_loft);
+
+    // return duct_walls.debug.subtract(cut, duct_hole_loft.debug).setName('duct');
+    // return duct_walls.debug.subtract(duct_hole_loft.debug).setName('duct');
 }
 
 
@@ -613,7 +616,20 @@ function create(
             left_blower_holder,
             right_blower_holder,
             p);
+    }
 
+    if (hasFan && hasBlowers) {
+        // right blower to fan link
+        let link = cuboid({
+            size: [
+                defs.blower.margins.x,
+                defs.fan.width - defs.fan.corner_radius * 2,
+                defs.depth]
+        });
+        link = align(link).left.back.bottom
+            .to(fan).right.back.bottom
+            .then.move.up(defs.fan.corner_radius).apply();
+        block = block.debug.union(link.debug);
     }
 
     helpers.placeBlowerLeft = placeBlower(left_blower_holder, defs);

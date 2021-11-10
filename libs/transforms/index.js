@@ -10,6 +10,9 @@ const {Rotation} = require("./Rotation");
 const {Scale: ScaleBase} = require("./Scale");
 const {Move: MoveBase} = require("./Move");
 const {Position: PositionBase} = require('./Position');
+const {FromBoundsTranslation} = require('./FromBoundsTranslation');
+const {AlignReference} = require('./AlignReference');
+const {Composite} = require('./Composite');
 
 class Chainable {
     constructor(geometry, matrix) {
@@ -48,84 +51,6 @@ const Thenable = (Parent) => class extends Parent {
     }
 }
 
-class FromBoundsTranslation extends Translation {
-    constructor(geometry, matrix) {
-        super(geometry, matrix);
-    }
-
-    get top() {
-        this.translation[1] = this.bounds.top;
-        return this;
-    }
-
-    get bottom() {
-        this.translation[1] = this.bounds.bottom;
-        return this;
-    }
-
-    get left() {
-        this.translation[0] = this.bounds.left;
-        return this;
-    }
-
-    get right() {
-        this.translation[0] = this.bounds.right;
-        return this;
-    }
-
-    get front() {
-        this.translation[2] = this.bounds.front;
-        return this;
-    }
-
-    get back() {
-        this.translation[2] = this.bounds.back;
-        return this;
-    }
-
-    get centerX() {
-        this.translation[0] = this.bounds.center.x;
-        return this;
-    }
-
-    get centerY() {
-        this.translation[1] = this.bounds.center.y;
-        return this;
-    }
-
-    get centerZ() {
-        this.translation[2] = this.bounds.center.z;
-        return this;
-    }
-
-    get center() {
-        return this.centerX.centerY.centerZ;
-    }
-
-}
-
-const AlignReference = Parent => class extends Parent {
-    constructor(source, reference) {
-        super(reference);
-        this.source = source
-    }
-
-    getMatrix() {
-        const ms = this.source.invert().getMatrix();
-        const mr = super.getMatrix();
-        return this.source.multiplyMatrices(mr, ms);
-    }
-
-    applyTransform(matrix, ...geometries) {
-        return this.source && this.source.applyTransform(matrix, ...geometries) ||
-            super.applyTransform(matrix, ...geometries);
-    }
-
-    getGeometry() {
-        return this.source && this.source.getGeometry() || super.getGeometry();
-    }
-}
-
 const ThenableAlignReference = Parent => Thenable(AlignReference(Parent))
 const AlignReferenceBounds = ThenableAlignReference(FromBoundsTranslation);
 const AlignReferenceMove = ThenableAlignReference(PositionBase);
@@ -147,69 +72,6 @@ const AlignSource = (Parent) => class extends Parent {
             new AlignReferenceBounds(this, reference) :
             new AlignReferenceMove(this, this.geometry);
     }
-}
-
-const Composite = (TargetClass, {
-    ignore = []
-} = {}) => {
-    const Clazz = class {
-        constructor(targets, matrices) {
-            // console.log(targets)
-            this.targets = targets?.map((target, i) => matrices ?
-                new TargetClass(target, matrices[i]) :
-                new TargetClass(target));
-            this.geometry = targets;
-            this.isComposite = true;
-        }
-
-        apply() {
-            return this.targets.map(target => target.apply());
-        }
-
-        getGeometry() {
-            return this.targets.map(target => target.getGeometry());
-        }
-
-        getMatrix() {
-            return this.targets.map(target => target.getMatrix());
-        }
-    }
-
-    // no sense to applyToTargetAnd and applyTo on composite
-    // getGeometry is an end point
-    // apply is an end point
-    ignore.push('getGeometry', 'apply',
-        'applyToTargetAnd', 'applyTo',
-        'constructor', 'getMatrix');
-
-    let proto = TargetClass.prototype;
-    while (proto && proto !== Object.prototype) {
-        for (let method of
-            Object.getOwnPropertyNames(proto)
-                .filter(x => !ignore.includes(x))) {
-
-            const descriptor = Object.getOwnPropertyDescriptor(proto, method);
-            if (descriptor?.get) {
-                Object.defineProperty(Clazz.prototype, method, {
-                    get: function () {
-                        // console.log(method)
-                        this.targets.map(target => target[method]);
-                        return this;
-                    }
-                });
-            } else if (typeof TargetClass.prototype[method] === 'function') {
-                Clazz.prototype[method] = function (...args) {
-                    // console.log(method)
-                    // console.log(this.targets)
-                    this.targets.map(target => target[method](...args));
-                    return this;
-                }
-            }
-        }
-        proto = Object.getPrototypeOf(proto);
-    }
-
-    return Clazz;
 }
 
 const CompositedAlignReference = Parent => class extends Thenable(Composite(AlignReference(Parent))) {
